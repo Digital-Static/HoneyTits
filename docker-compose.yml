@@ -1,0 +1,105 @@
+version: "3.8"
+
+volumes:
+  grafana-storage:
+  mysql-storage:
+
+services:
+  db:
+    image: mysql:8.0.34
+    container_name: cowrie_db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${COWRIE_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: cowrie
+      MYSQL_USER: ${COWRIE_DB_USERNAME}
+      MYSQL_PASSWORD: ${COWRIE_DB_PASSWORD}
+    restart: 'always'
+    volumes: 
+      - mysql-storage:/var/lib/mysql
+    ports:
+      - 3306:3306
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "db", "-uroot", "-p${COWRIE_DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  adminer:
+    image: adminer:4.8.1
+    container_name: cowrie_adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    restart: unless-stopped
+    ports:
+      - 8080:8080
+    depends_on:
+      db:
+        condition: service_healthy
+  schema_builder:
+    image: mysql:8.0.34
+    container_name: schema_builder
+    command: >
+      bash -c "mysql -u root --port 3306 --host db -D cowrie -p${COWRIE_DB_ROOT_PASSWORD} -e 'SELECT * FROM auth'
+      || (mysql -u ${COWRIE_DB_USERNAME} --port 3306 --host db -D cowrie -p${COWRIE_DB_PASSWORD} < /tmp/cowrie.sql
+      &&  tar xf /tmp/geoip.sql.tar.gz -C /tmp && mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} < /tmp/geoip.sql
+      &&  mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} < /tmp/functions.sql
+      &&  mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} -e \"GRANT ALL PRIVILEGES ON geoip.* TO '${COWRIE_DB_USERNAME}'@'%'\")"
+    restart: 'no'
+    volumes:
+      - ./setup/sql/cowrie.sql:/tmp/cowrie.sql
+      - ./setup/sql/geoip.sql.tar.gz:/tmp/geoip.sql.tar.gz
+      - ./setup/sql/functions.sql:/tmp/functions.sql
+    depends_on:
+      db:
+        condition: service_healthy
+  grafana:
+    image: grafana/grafana:10.0.3
+    container_name: dashboard
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    ports:
+      - 3000:3000
+    user: '104'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-X", "GET", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      schema_builder:
+        condition: service_completed_successfully
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: honey_pot
+    environment:
+      - COWRIE_OUTPUT_MYSQL_ENABLED=true
+      - COWRIE_OUTPUT_MYSQL_HOST=db
+      - COWRIE_OUTPUT_MYSQL_DATABASE=cowrie
+      - COWRIE_OUTPUT_MYSQL_USERNAME=${COWRIE_DB_USERNAME}
+      - COWRIE_OUTPUT_MYSQL_PASSWORD=${COWRIE_DB_PASSWORD}
+    restart: always
+    volumes:
+      - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
+      - ./userdb.txt:/cowrie/cowrie-git/etc/userdb.txt
+    ports:
+      - ${COWRIE_SSH_PORT}:2222
+      - ${COWRIE_TELNET_PORT}:2223
+    depends_on:
+      schema_builder:
+        condition: service_completed_successfully
+  grafana_loader:
+    image: quay.io/curl/curl:8.2.1
+    container_name: grafana_loader
+    user: root
+    command: >
+      sh -c "cp -r /tmp/grafana /root/ 
+      && cd /root/grafana 
+      && sh setup.sh --user=${COWRIE_DB_USERNAME} --database=cowrie --password=${COWRIE_DB_PASSWORD}"
+    restart: 'no'
+    volumes:
+      - ./setup/grafana:/tmp/grafana:ro
+    depends_on:
+      grafana:
+        condition: service_healthy

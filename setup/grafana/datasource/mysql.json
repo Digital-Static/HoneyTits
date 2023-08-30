@@ -1,0 +1,25 @@
+{
+    "id": 1,
+    "uid": "c677b181-b2b4-4d93-b7ef-595e8c85b828",
+    "orgId": 1,
+    "name": "MySQL",
+    "type": "mysql",
+    "typeName": "MySQL",
+    "typeLogoUrl": "public/app/plugins/datasource/mysql/img/mysql_logo.svg",
+    "access": "proxy",
+    "url": "db:3306",
+    "user": "COWRIE_DB_USERNAME",
+    "basicAuth": false,
+    "secureJsonData": {
+        "password": "COWRIE_DB_PASSWORD"
+    },    
+    "isDefault": true,
+    "jsonData": {
+        "connMaxLifetime": 14400,
+        "database": "COWRIE_DB_SCHEMA",
+        "maxIdleConns": 100,
+        "maxIdleConnsAuto": true,
+        "maxOpenConns": 100
+    },
+    "readOnly": false
+}
