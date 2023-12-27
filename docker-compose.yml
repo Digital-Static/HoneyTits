@@ -40,7 +40,8 @@ services:
     command: >
       bash -c "mysql -u root --port 3306 --host db -D cowrie -p${COWRIE_DB_ROOT_PASSWORD} -e 'SELECT * FROM auth'
       || (mysql -u ${COWRIE_DB_USERNAME} --port 3306 --host db -D cowrie -p${COWRIE_DB_PASSWORD} < /tmp/cowrie.sql
-      &&  tar xf /tmp/geoip.sql.tar.gz -C /tmp && mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} < /tmp/geoip.sql
+      && mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} -e \"CREATE DATABASE IF NOT EXISTS geoip;\"
+      &&  tar xf /tmp/geoip.sql.tar.gz -C /tmp && mysql -u root --port 3306 --host db -D geoip -p${COWRIE_DB_ROOT_PASSWORD} < /tmp/geoip.sql
       &&  mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} < /tmp/functions.sql
       &&  mysql -u root --port 3306 --host db -p${COWRIE_DB_ROOT_PASSWORD} -e \"GRANT ALL PRIVILEGES ON geoip.* TO '${COWRIE_DB_USERNAME}'@'%'\")"
     restart: 'no'
